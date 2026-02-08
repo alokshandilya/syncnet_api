@@ -5,6 +5,9 @@ import numpy as np
 import librosa
 import os
 
+# Constants
+SYNC_THRESHOLD = 7.5
+
 # --- A. Define SyncNet Architecture ---
 class SyncNet(nn.Module):
     def __init__(self):
@@ -235,8 +238,8 @@ def analyze_sync(video_path, model):
         return {"status": "failed", "reason": "No faces or sync detected"}
 
     avg_dist = np.mean(sync_scores)
-    # Threshold: < 7.0 is usually "Good", > 7.0 is "Bad"
-    is_good = avg_dist < 7.5 
+    # Threshold: < SYNC_THRESHOLD is "Good", > SYNC_THRESHOLD is "Bad"
+    is_good = avg_dist < SYNC_THRESHOLD
 
     return {
         "status": "success",
