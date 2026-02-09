@@ -94,7 +94,9 @@ class SyncNet(nn.Module):
 
 # --- B. Helper: Load Model ---
 def load_syncnet_model(model_path="syncnet_v2.model"):
-    device = torch.device("cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Loading model on: {device}")
+
     model = SyncNet()
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found at {model_path}")
@@ -126,11 +128,15 @@ def load_syncnet_model(model_path="syncnet_v2.model"):
         print(f"Warning: strict loading failed ({e}), trying strict=False")
         model.load_state_dict(new_state_dict, strict=False)
         
+    model.to(device)
     model.eval()
     return model
 
 # --- C. Core Logic: Process Video ---
 def analyze_sync(video_path, model):
+    # Determine device from model parameters
+    device = next(model.parameters()).device
+
     # 1. Init Face Detector
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
@@ -199,7 +205,7 @@ def analyze_sync(video_path, model):
             # Create Video Tensor: [1, 3, 5, 111, 111]
             vid_batch = np.stack(frame_buffer[-5:], axis=0)
             vid_batch = np.transpose(vid_batch, (3, 0, 1, 2)) # HWC -> CHW
-            vid_tensor = torch.FloatTensor(vid_batch).unsqueeze(0)
+            vid_tensor = torch.FloatTensor(vid_batch).unsqueeze(0).to(device)
 
             # Audio extraction logic matching the current 5 frames
             # Center time of the 5-frame window
@@ -219,7 +225,7 @@ def analyze_sync(video_path, model):
                 # We need exactly 20 time steps. 
                 if mfcc.shape[1] >= 20:
                     mfcc = mfcc[:, :20] # trim
-                    aud_tensor = torch.FloatTensor(mfcc).unsqueeze(0).unsqueeze(0)
+                    aud_tensor = torch.FloatTensor(mfcc).unsqueeze(0).unsqueeze(0).to(device)
 
                     with torch.no_grad():
                         a_emb, v_emb = model(aud_tensor, vid_tensor)
