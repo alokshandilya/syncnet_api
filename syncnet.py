@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import librosa
 import os
+import shutil
 
 # Constants
 SYNC_THRESHOLD = 7.5
@@ -141,11 +142,14 @@ def analyze_sync(video_path, model):
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
     # 2. Load Audio & Video
+    if not shutil.which("ffmpeg"):
+        return {"error": "Audio processing failed: FFmpeg is not installed or not in PATH."}
+
     # Librosa load (resample to 16k)
     try:
         audio_full, sr = librosa.load(video_path, sr=16000)
     except Exception as e:
-        return {"error": f"Audio processing failed: {str(e)}"}
+        return {"error": f"Audio processing failed: {type(e).__name__}: {str(e)}"}
 
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
