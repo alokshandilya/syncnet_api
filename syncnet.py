@@ -5,6 +5,8 @@ import numpy as np
 import librosa
 import os
 import shutil
+import subprocess
+import tempfile
 
 # Constants
 SYNC_THRESHOLD = 7.5
@@ -146,9 +148,36 @@ def analyze_sync(video_path, model):
         return {"error": "Audio processing failed: FFmpeg is not installed or not in PATH."}
 
     # Librosa load (resample to 16k)
+    # Use ffmpeg directly to extract wav to avoid NoBackendError with audioread
     try:
-        audio_full, sr = librosa.load(video_path, sr=16000)
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            temp_audio_path = tmp.name
+
+        # Extract audio: mono, 16kHz
+        process = subprocess.run([
+            "ffmpeg", "-y", "-i", video_path, 
+            "-vn", "-ac", "1", "-ar", "16000", 
+            temp_audio_path
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        if process.returncode != 0:
+            error_msg = process.stderr.decode('utf-8', errors='ignore')
+            # Handle case where video has no audio
+            if "Output file does not contain any stream" in error_msg:
+                if os.path.exists(temp_audio_path):
+                    os.remove(temp_audio_path)
+                return {"error": "Video file has no audio stream."}
+            
+            raise RuntimeError(f"FFmpeg error (code {process.returncode}): {error_msg}")
+
+        audio_full, sr = librosa.load(temp_audio_path, sr=16000)
+        
+        if os.path.exists(temp_audio_path):
+            os.remove(temp_audio_path)
+
     except Exception as e:
+        if 'temp_audio_path' in locals() and os.path.exists(temp_audio_path):
+            os.remove(temp_audio_path)
         return {"error": f"Audio processing failed: {type(e).__name__}: {str(e)}"}
 
     cap = cv2.VideoCapture(video_path)
